@@ -59,7 +59,7 @@ class TelegramSender:
 
         text = (
             f"⚠️ *[SECURITY ALERT]*\n"
-            f"*Smart USB Guardian* detected registered USB device connection!\n\n"
+            f"*USB-Sentry* detected registered USB device connection!\n\n"
             f"👤 *Device:* {usb_info.get('label', 'USB Drive')}\n"
             f"🔢 *Serial:* `{usb_info.get('serial_number')}`\n"
             f"🏢 *Owner:* {usb_info.get('owner_name')}\n\n"
@@ -116,7 +116,7 @@ class TelegramSender:
             
             # Send test message
             send_url = f"https://api.telegram.org/bot{token}/sendMessage"
-            test_msg = f"🔔 *Smart USB Guardian* test message from *{bot_name}*. Your configurations are correct!"
+            test_msg = f"🔔 *USB-Sentry* test message from *{bot_name}*. Your configurations are correct!"
             payload = {
                 "chat_id": chat_id,
                 "text": test_msg,

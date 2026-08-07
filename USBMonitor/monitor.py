@@ -164,7 +164,7 @@ class USBMonitor(threading.Thread):
     def run(self):
         """Thread main loop: polls or watches WMI events for USB mount/unmount."""
         self.running = True
-        print("Smart USB Guardian monitoring engine started...")
+        print("USB-Sentry monitoring engine started...")
         
         # Initialize WMI in this thread context (required for COM threads)
         pythoncom_initialized = False

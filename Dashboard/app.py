@@ -46,7 +46,7 @@ class LoginWidget(QWidget):
         card_layout.setContentsMargins(30, 40, 30, 40)
 
         # Header titles
-        logo_title = QLabel("🛡️ Smart USB Guardian")
+        logo_title = QLabel("🛡️ USB-Sentry")
         logo_title.setObjectName("logoTitle")
         logo_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         card_layout.addWidget(logo_title)
@@ -101,7 +101,7 @@ class MainWindow(QMainWindow):
         self.config = config_manager
         self.agent = agent_service
         
-        self.setWindowTitle("Smart USB Guardian - Recovery & Tracking System")
+        self.setWindowTitle("USB-Sentry – Intelligent USB Security & Data Loss Prevention System")
         self.setMinimumSize(1150, 780)
         self.init_ui()
 
@@ -131,7 +131,7 @@ class MainWindow(QMainWindow):
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
         sidebar_layout.setSpacing(0)
 
-        sidebar_title = QLabel("🛡️ Guardian Dashboard")
+        sidebar_title = QLabel("🛡️ USB-Sentry")
         sidebar_title.setObjectName("sidebarHeader")
         sidebar_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         sidebar_layout.addWidget(sidebar_title)
@@ -237,7 +237,7 @@ class MainWindow(QMainWindow):
         """Clean shutdown hook to stop background monitoring agents."""
         reply = QMessageBox.question(
             self, "Confirm Exit",
-            "Are you sure you want to close the Smart USB Guardian Dashboard?\n"
+            "Are you sure you want to close the USB-Sentry Dashboard?\n"
             "The background USB monitoring agent thread will be terminated.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
@@ -265,7 +265,7 @@ def run_gui(db_manager, config_manager, agent_service):
         main_window.show()
     ))
     
-    login_widget.setWindowTitle("Smart USB Guardian - Administrator Authentication")
+    login_widget.setWindowTitle("USB-Sentry - Administrator Authentication")
     login_widget.setMinimumSize(450, 400)
     login_widget.show()
     

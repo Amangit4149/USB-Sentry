@@ -239,9 +239,9 @@ class DevicesView(QWidget):
                 "owner_email": email,
                 "emergency_contact": contact,
                 "signature": signature,
-                "system_agent_url": "Smart USB Guardian Endpoint Agent",
+                "system_agent_url": "USB-Sentry Endpoint Agent",
                 "recovery_instructions": (
-                    "This USB drive is registered in the Smart USB Guardian tracking network. "
+                    "This USB drive is registered in the USB-Sentry tracking network. "
                     "If found, please return it to the owner or plug it into an internet-connected "
                     "computer. Safe recovery steps will run in the background."
                 )
@@ -259,7 +259,7 @@ class DevicesView(QWidget):
             readme_file = os.path.join(usb_dir, "README_RECOVERY.txt")
             readme_text = (
                 "========================================================================\n"
-                "🛡️ SMART USB GUARDIAN - SECURE RECOVERY SYSTEM\n"
+                "🛡️ USB-SENTRY - INTELLIGENT USB SECURITY & RECOVERY SYSTEM\n"
                 "========================================================================\n\n"
                 "LOST AND FOUND WARNING NOTICE:\n"
                 f"This USB flash drive named '{label}' has been lost by its owner.\n\n"
@@ -270,7 +270,7 @@ class DevicesView(QWidget):
                 "INSTRUCTIONS FOR THE FINDER:\n"
                 "If you have found this drive, please do one of the following:\n"
                 "1. Connect with the owner via the email or phone number above.\n"
-                "2. Connect the drive to any PC running the Smart USB Guardian Agent.\n"
+                "2. Connect the drive to any PC running the USB-Sentry Agent.\n"
                 "   The agent will securely notify the owner of the device's location\n"
                 "   to facilitate a swift recovery.\n\n"
                 "Thank you for your honesty and cooperation in returning this device!\n"

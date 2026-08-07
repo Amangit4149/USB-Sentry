@@ -42,9 +42,9 @@ class DashboardView(QWidget):
         # Title block
         title_block = QVBoxLayout()
         title_block.setSpacing(1)
-        title_lbl = QLabel("🛡️  Smart USB Guardian")
+        title_lbl = QLabel("🛡️  USB-Sentry")
         title_lbl.setStyleSheet("font-size: 18px; font-weight: 700; color: #f1f5f9;")
-        subtitle_lbl = QLabel("Intelligent USB Tracking & Security Operations Centre")
+        subtitle_lbl = QLabel("Intelligent USB Security & Data Loss Prevention System")
         subtitle_lbl.setStyleSheet("font-size: 11px; color: #64748b;")
         title_block.addWidget(title_lbl)
         title_block.addWidget(subtitle_lbl)

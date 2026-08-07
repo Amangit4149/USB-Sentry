@@ -9,7 +9,7 @@ from Dashboard.app import run_gui
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Smart USB Guardian - Intelligent Lost Pendrive Tracking & Secure Recovery System"
+        description="USB-Sentry – Intelligent USB Security & Data Loss Prevention System"
     )
     parser.add_argument(
         "--agent", "-a",
@@ -42,7 +42,7 @@ def main():
     if args.register_startup:
         success = StartupManager.register_startup()
         if success:
-            print("Successfully registered Smart USB Guardian to run on Windows logon.")
+            print("Successfully registered USB-Sentry to run on Windows logon.")
             sys.exit(0)
         else:
             print("Failed to register startup registry entry.")
@@ -51,7 +51,7 @@ def main():
     elif args.unregister_startup:
         success = StartupManager.unregister_startup()
         if success:
-            print("Successfully removed Smart USB Guardian startup registry key.")
+            print("Successfully removed USB-Sentry startup registry key.")
             sys.exit(0)
         else:
             print("Failed to remove startup registry entry.")

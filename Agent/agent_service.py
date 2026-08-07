@@ -193,7 +193,7 @@ class AgentService:
             self.active = False
             if self.monitor:
                 self.monitor.stop()
-            print("Smart USB Guardian monitoring agent stopped.")
+            print("USB-Sentry monitoring agent stopped.")
 
 if __name__ == "__main__":
     # Test execution

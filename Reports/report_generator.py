@@ -143,9 +143,9 @@ class ReportGenerator:
             story = []
 
             # --- HEADER SECTION ---
-            story.append(Paragraph("Smart USB Guardian", title_style))
+            story.append(Paragraph("USB-Sentry", title_style))
             story.append(Paragraph(
-                f"<b>Lost Pendrive Tracking & Secure Recovery Audit Report</b><br/>"
+                f"<b>Intelligent USB Security & Data Loss Prevention Audit Report</b><br/>"
                 f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br/>"
                 f"Security Classification: Confidential / Administrator Use Only",
                 subtitle_style

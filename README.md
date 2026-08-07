@@ -1,121 +1,182 @@
-# 🛡️ Smart USB Guardian
+# 🛡️ USB-Sentry – Intelligent USB Security & Data Loss Prevention System
 
-### Intelligent Lost Pendrive Tracking & Secure Recovery System
+> A comprehensive cybersecurity tracking, monitoring, and data loss prevention suite for USB storage devices.
 
-**Smart USB Guardian** is a comprehensive Python-based cybersecurity tracking and recovery suite. It consists of a Windows background monitoring agent, a secure SQLite database, automated email/Telegram alert systems, and a high-performance, dark-themed PyQt6 administrative dashboard.
-
-The system allows you to **register** and **provision** USB flash drives. When a lost, registered USB drive is connected to any machine running the Smart USB Guardian Agent, it silently gathers system forensic data, resolves geographical coordinates based on the public IP address, logs connection history, and immediately dispatches alerts (with Google Maps location) to the device owner's email and Telegram channel.
+**USB-Sentry** is an advanced Python-based endpoint security and device tracking solution. It provides real-time monitoring of USB storage devices, forensic data collection upon insertion, public IP geolocation tracking, multi-channel alerting (Email & Telegram), and an interactive administrative dashboard.
 
 ---
 
-## 🚀 Key Features
+## 🎯 Overview & Key Features
 
-1. **Intelligent Hardware Monitoring**: Lightweight thread polling Windows WMI API for removable disk mount/unmount triggers.
-2. **Dynamic Provisioning**: Embeds a hidden, cryptographically signed metadata signature file (`.usb_guardian.json`) and a visible text recovery notice (`README_RECOVERY.txt`) on the USB drives.
-3. **Forensic Telemetry**: Collects Host Computer Name, Active Username, Local IP, MAC Address, OS release version, CPU Specifications, RAM Capacity, and Timezone.
-4. **Geolocation Resolution**: Automatic geo-tracking via public IP, querying latitude, longitude, country, state, and city with direct Google Maps integration.
-5. **Multi-Channel Alert Dispatch**: Async email (SMTP) and Telegram Bot API alert delivery.
-6. **Vibrant Analytics Dashboard**: Built using PyQt6, featuring custom dark-mode styling, Matplotlib activity timelines, registered device lists, interactive location maps (Folium), and logs explorer.
-7. **Confidential Reporting**: Generates forensic PDF reports with embedded graphs (using ReportLab) and CSV spreadsheet exports.
-8. **Hardware-Bound Security**: Encrypts settings (such as mail credentials and Telegram tokens) using AES-256 (Fernet) bound to the machine's motherboard BIOS UUID, further wrapped in the Windows Data Protection API (DPAPI).
+1. **Real-Time USB Hardware Monitoring**: Automatically detects removable USB storage device insertions and removals using Windows WMI APIs.
+2. **Device Provisioning & Digital Fingerprinting**: Provision USB drives with cryptographically signed metadata signatures (`.usb_guardian.json`) and visible recovery instructions (`README_RECOVERY.txt`).
+3. **Forensic Telemetry Gathering**: Collects detailed machine data upon USB connection:
+   - System Hostname & Active Logged-in Username
+   - Network Data: Local IP, MAC Address, Public IP Address
+   - System Specs: OS Version, CPU Specifications, RAM Capacity, Timezone
+4. **Geolocation Resolution**: Resolves public IP addresses to geographical coordinates (Latitude, Longitude, Country, City) and generates instant Google Maps links.
+5. **Multi-Channel Alert Dispatch**: Sends automated real-time alerts via:
+   - **SMTP Email**: Formatted HTML security reports with system & geolocation details.
+   - **Telegram Bot API**: Direct push notifications to designated Telegram channels or users.
+6. **Administrative Control Dashboard**: Built with PyQt6, featuring a modern dark theme, real-time analytics graphs, device inventory management, interactive geographical maps (Folium), and searchable log history.
+7. **Forensic Reporting & Export**: Generates PDF reports complete with embedded charts (ReportLab) and CSV spreadsheet data exports.
+8. **Hardware-Bound Configuration Security**: Encrypts sensitive configuration data (email credentials, Telegram bot tokens) using AES-256 (Fernet) tied to the host's motherboard BIOS UUID and Windows DPAPI.
 
 ---
 
-## 📂 Project Structure
+## 📂 Repository Structure
 
 ```
-SmartUSBGuardian/
+USB-Sentry/
 ├── Agent/
-│   ├── agent_service.py       # Main background agent service loop
-│   ├── info_collector.py      # System forensics & IP geolocation logic
-│   └── startup_manager.py     # Registry key autostart manager
+│   ├── agent_service.py       # Background monitoring loop & trigger handler
+│   ├── info_collector.py      # System forensics & IP geolocation retriever
+│   └── startup_manager.py     # Windows Registry autostart installer
 ├── Config/
-│   ├── config_manager.py      # Reads/writes encrypted settings
-│   └── settings.enc           # Secure encrypted configurations file
+│   ├── config_manager.py      # Encrypted settings reader & writer
+│   └── settings.enc           # AES-256 encrypted configuration file
 ├── Dashboard/
-│   ├── app.py                 # PyQt6 main login & sidebar window UI
-│   ├── styles.py              # CSS/QSS premium styling theme
+│   ├── app.py                 # Main PyQt6 graphical portal launcher
+│   ├── styles.py              # Dark theme CSS/QSS styling definitions
 │   └── views/
-│       ├── dashboard_view.py  # Live metrics overview & canvas graph
-│       ├── devices_view.py    # Auto-fill detection & provisioning
-│       ├── logs_view.py       # Historical database event search tabs
-│       ├── map_view.py        # Geolocation log tables & Folium map launch
-│       ├── reports_view.py    # PDF report and CSV spreadsheet exporter UI
-│       └── settings_view.py   # Secure SMTP/Telegram configurations
+│       ├── dashboard_view.py  # System overview metrics & activity graphs
+│       ├── devices_view.py    # USB drive detection, auto-fill & provisioning
+│       ├── logs_view.py       # Filterable event log tables
+│       ├── map_view.py        # Geolocation telemetry & interactive maps
+│       ├── reports_view.py    # PDF & CSV forensic exporter UI
+│       ├── unknown_devices.py # Unregistered USB detection & stats
+│       └── settings_view.py   # Admin credentials, SMTP & Telegram config
 ├── Database/
-│   ├── db_manager.py          # SQLite connections, schemas, and queries
-│   └── guardian.db            # Local security event database file
+│   ├── db_manager.py          # SQLite database schema & operations
+│   └── guardian.db            # Local event & device database
 ├── Email/
-│   ├── email_sender.py        # SMTP client & premium HTML mail renderer
-│   └── telegram_sender.py     # Telegram Bot API client wrapper
+│   ├── email_sender.py        # HTML email template generator & SMTP client
+│   └── telegram_sender.py     # Telegram Bot API notification engine
 ├── Encryption/
-│   └── crypto_helper.py       # Motherboard UUID key derivation & DPAPI layer
+│   └── crypto_helper.py       # Key derivation using motherboard UUID & DPAPI
 ├── Reports/
-│   └── report_generator.py    # ReportLab PDF compilation & CSV writer
-├── main.py                    # Unified entry point launcher
-└── requirements.txt           # Python dependency specifications
+│   └── report_generator.py    # ReportLab PDF compilation & CSV export logic
+├── USBMonitor/
+│   └── monitor.py             # WMI removable storage event listener
+├── Launch Guardian.bat        # Quick-start batch file launcher
+├── main.py                    # Unified CLI & GUI entry point
+└── requirements.txt           # Required Python packages
 ```
 
 ---
 
-## 🛠️ Setup & Installation
+## 🛠️ Step-by-Step Installation Guide
 
-### 1. Prerequisites
-- **Operating System**: Windows 10/11
-- **Python**: version 3.8 to 3.12 (Ensure Python is added to your system `PATH`)
+### Prerequisites
+- **Operating System**: Windows 10 or Windows 11
+- **Python Version**: Python 3.8 to 3.12 installed (Make sure to check **"Add Python to PATH"** during installation)
+- **Administrator Access**: Required for registry autostart configuration and WMI device monitoring.
 
-### 2. Install Dependencies
-Run a Command Prompt or PowerShell as Administrator and run:
+### 1. Clone or Download the Repository
+```bash
+git clone https://github.com/Amangit4149/USB-Sentry.git
+cd USB-Sentry
+```
+
+### 2. Set Up a Virtual Environment (Optional but Recommended)
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+
+### 3. Install Dependencies
+Run the following command to install all required libraries:
 ```bash
 pip install -r requirements.txt
 ```
-*Note: Dependecies include `PyQt6`, `psutil`, `pywin32`, `wmi`, `requests`, `geopy`, `cryptography`, `matplotlib`, `folium`, and `reportlab`.*
 
 ---
 
-## 🏁 How to Run
+## 🚀 How to Use USB-Sentry
 
-The system is launched via the unified script entry point `main.py`.
+USB-Sentry can be run in two primary modes: **Graphical Dashboard Mode** and **Background Agent Mode**.
 
-### 1. Start the Graphical Dashboard
-To launch the admin portal dashboard:
+### Mode 1: Graphical Dashboard (Admin Portal)
+To launch the full interactive administration dashboard:
+
 ```bash
 python main.py
 ```
-- **Default Authentication**: Log in with:
-  - **Username**: `admin`
-  - **Password**: `admin`
-- *You can update the administrator password in the **System Settings** tab inside the dashboard.*
+*(Or double-click `Launch Guardian.bat`)*
 
-### 2. Run the Background Agent (CLI Mode)
-To run the background USB monitoring agent process without the GUI:
+**Default Admin Credentials**:
+- **Username**: `admin`
+- **Password**: `admin`
+
+*(Note: You can change the password at any time in **System Settings** inside the dashboard.)*
+
+---
+
+### Mode 2: System Settings Setup (First-Time Setup)
+
+Before deploying agents or provisioning USB drives:
+1. Open the **Dashboard** (`python main.py`).
+2. Navigate to **System Settings**.
+3. Configure your notification channels:
+   - **SMTP Email Config**: Enter SMTP Host (e.g. `smtp.gmail.com`), Port (`587`), Sender Email, and App Password.
+   - **Telegram Config**: Enter your Telegram Bot Token and Chat ID.
+4. Click **Send Test Email** and **Send Test Telegram** to confirm your settings are working.
+5. Click **Save Settings Configurations**.
+
+---
+
+### Mode 3: Provisioning & Registering a USB Drive
+
+To register and fingerprint a USB drive for tracking:
+1. Plug the USB flash drive into your computer.
+2. Open the **Dashboard** and go to **Registered Devices**.
+3. Select your drive letter from the dropdown and click **Detect & Auto-Fill**.
+4. Fill in the Owner Name, Owner Email, and contact details.
+5. Click **Provision & Register**.
+   - *USB-Sentry will register the device serial in the database, write a hidden cryptographic signature (`.usb_guardian.json`), and create a visible recovery notice (`README_RECOVERY.txt`) on the drive.*
+
+---
+
+### Mode 4: Running the Background Monitoring Agent
+
+The background agent monitors all USB insertions, collects forensic data, and triggers alerts automatically.
+
+#### A. Run Agent via Dashboard
+Click the **Start Agent** button on the top-right header of the Dashboard.
+
+#### B. Run Agent via Command Line
 ```bash
 python main.py --agent
 ```
 
-### 3. Register Startup Autostart
-To make the background agent start automatically when Windows boots up (without showing terminal console popups):
+#### C. Register Agent as Windows Startup Program
+To make the agent run automatically in the background every time Windows boots up:
 ```bash
+# Register for automatic Windows startup
 python main.py --register-startup
-```
-To remove the registry startup key:
-```bash
-python main.py --unregister-startup
-```
-To query current registry registration state:
-```bash
+
+# Check current autostart status
 python main.py --status
+
+# Remove from Windows startup
+python main.py --unregister-startup
 ```
 
 ---
 
-## 🛡️ Usage Instructions
+## 📊 Reports & Data Export
 
-1. **Configure Notifications**: Go to **System Settings** in the dashboard and set up your SMTP email settings (e.g. Gmail App Password) and Telegram Bot token + Chat ID. Click **Send Test Email** / **Send Test Telegram** to verify, and then click **Save Settings Configurations**.
-2. **Provision a USB Drive**:
-   - Insert a USB flash drive.
-   - Go to **Registered Devices** view.
-   - Select the drive in the **Detect USB Drive** dropdown and click **Detect & Auto-Fill**.
-   - Input the Owner Name, Owner Email, and emergency details.
-   - Click **Provision & Register**. This registers the serial in the DB and places a hidden tracking configuration `.usb_guardian.json` and a visible `README_RECOVERY.txt` on the USB.
-3. **Monitor Insertions**: Keep the agent running (either via the **Start Agent** button on the dashboard main view or by running `python main.py --agent`). When that USB is connected to any machine running the agent, forensic logs are written and instant notifications are sent!
+- **PDF Reports**: Navigate to the **Reports** tab in the dashboard to generate comprehensive PDF security summaries with charts.
+- **CSV Data Export**: Export logs and event records directly to CSV files for further analysis.
+
+---
+
+## 🔒 Security & Privacy
+
+All sensitive credentials stored by USB-Sentry are encrypted using **AES-256 encryption** with keys derived from the host computer's motherboard BIOS UUID and protected via the Windows **Data Protection API (DPAPI)**. Encrypted settings files cannot be decrypted on a different machine.
+
+---
+
+## 📜 License
+
+Distributed under the MIT License. See `LICENSE` for more details.
