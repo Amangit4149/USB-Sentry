@@ -89,6 +89,10 @@ class ReportsView(QWidget):
         self.csv_group.addButton(self.radio_emails, 3)
         csv_layout.addWidget(self.radio_emails)
         
+        self.radio_file_activity = QRadioButton("USB File Activity logs (Created/Modified/Deleted)")
+        self.csv_group.addButton(self.radio_file_activity, 4)
+        csv_layout.addWidget(self.radio_file_activity)
+        
         csv_layout.addStretch()
         
         self.build_csv_btn = QPushButton("Export selected data (CSV)")
@@ -140,9 +144,12 @@ class ReportsView(QWidget):
         elif selected_id == 2:
             log_type = "location"
             default_name = "usb_geo_tracking_log.csv"
-        else:
+        elif selected_id == 3:
             log_type = "email"
             default_name = "usb_notifications_log.csv"
+        else:
+            log_type = "file_activity"
+            default_name = "usb_file_activity_log.csv"
 
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Export CSV Logs", 

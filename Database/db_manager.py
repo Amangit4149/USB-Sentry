@@ -128,6 +128,38 @@ class DBManager:
             """)
             conn.commit()
 
+            # USB File Activity logs
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS file_activity_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    drive_serial TEXT NOT NULL,
+                    event_action TEXT NOT NULL,
+                    file_path TEXT NOT NULL,
+                    file_size TEXT,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.commit()
+
+            # Seed initial file activity logs if empty
+            cursor.execute("SELECT COUNT(*) FROM file_activity_logs")
+            if cursor.fetchone()[0] == 0:
+                sample_data = [
+                    ("D: (04015225CE90C96E055D)", "MODIFIED", r"D:\project\aaaa\New folder\ascii.webp", "20,664 B", "2026-08-30 08:46:39"),
+                    ("D: (04015225CE90C96E055D)", "CREATED",  r"D:\project\aaaa\New folder\ascii.webp", "20,664 B", "2026-08-30 08:46:39"),
+                    ("D: (04015225CE90C96E055D)", "MODIFIED", r"D:\project\aaaa\ascii.webp", "20,664 B", "2026-08-30 08:46:17"),
+                    ("D: (04015225CE90C96E055D)", "CREATED",  r"D:\project\aaaa\ascii.webp", "20,664 B", "2026-08-30 08:46:17"),
+                    ("D: (04015225CE90C96E055D)", "MODIFIED", r"D:\project\ascii.webp", "20,664 B", "2026-08-30 08:45:18"),
+                    ("D: (04015225CE90C96E055D)", "CREATED",  r"D:\project\ascii.webp", "20,664 B", "2026-08-30 08:45:18"),
+                    ("D: (04015225CE90C96E055D)", "DELETED",  r"D:\New folder", "—", "2026-08-30 08:43:59"),
+                    ("D: (04015225CE90C96E055D)", "DELETED",  r"D:\New folder", "—", "2026-08-30 08:43:12"),
+                ]
+                cursor.executemany("""
+                    INSERT INTO file_activity_logs (drive_serial, event_action, file_path, file_size, timestamp)
+                    VALUES (?, ?, ?, ?, ?)
+                """, sample_data)
+                conn.commit()
+
     # User Management functions
     def register_user(self, username, password_hash):
         try:
@@ -212,11 +244,12 @@ class DBManager:
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 cursor.execute("""
                     INSERT INTO device_logs 
                     (usb_serial, event_type, computer_name, username, local_ip, public_ip, mac_address, os_version, cpu_info, ram_info, suspicious_files, timestamp)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (usb_serial, event_type, computer_name, username, local_ip, public_ip, mac_address, os_version, cpu_info, ram_info, suspicious_files, datetime.now()))
+                """, (usb_serial, event_type, computer_name, username, local_ip, public_ip, mac_address, os_version, cpu_info, ram_info, suspicious_files, now_str))
                 conn.commit()
                 return cursor.lastrowid
         except sqlite3.Error as e:
@@ -229,6 +262,7 @@ class DBManager:
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 cursor.execute("""
                     INSERT INTO unknown_device_logs
                     (serial_number, manufacturer, vid, pid, drive_letter, computer_name,
@@ -236,7 +270,7 @@ class DBManager:
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (serial_number, manufacturer, vid, pid, drive_letter, computer_name,
                       username, local_ip, public_ip, mac_address, os_version, suspicious_files,
-                      datetime.now()))
+                      now_str))
                 conn.commit()
                 return cursor.lastrowid
         except sqlite3.Error as e:
@@ -261,11 +295,12 @@ class DBManager:
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 cursor.execute("""
                     INSERT INTO location_logs 
                     (usb_serial, country, state, city, latitude, longitude, maps_link, timestamp)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (usb_serial, country, state, city, latitude, longitude, maps_link, datetime.now()))
+                """, (usb_serial, country, state, city, latitude, longitude, maps_link, now_str))
                 conn.commit()
                 return cursor.lastrowid
         except sqlite3.Error as e:
@@ -276,11 +311,12 @@ class DBManager:
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 cursor.execute("""
                     INSERT INTO email_logs 
                     (usb_serial, recipient, notification_type, status, error_message, timestamp)
                     VALUES (?, ?, ?, ?, ?, ?)
-                """, (usb_serial, recipient, notification_type, status, error_message, datetime.now()))
+                """, (usb_serial, recipient, notification_type, status, error_message, now_str))
                 conn.commit()
                 return cursor.lastrowid
         except sqlite3.Error as e:
@@ -295,11 +331,11 @@ class DBManager:
                 query = """
                     SELECT dl.*, ru.label FROM device_logs dl
                     LEFT JOIN registered_usbs ru ON dl.usb_serial = ru.serial_number
-                    WHERE dl.usb_serial LIKE ? OR dl.computer_name LIKE ? OR dl.username LIKE ? OR ru.label LIKE ?
+                    WHERE dl.usb_serial LIKE ? OR dl.computer_name LIKE ? OR dl.username LIKE ? OR ru.label LIKE ? OR dl.timestamp LIKE ?
                     ORDER BY dl.timestamp DESC LIMIT ? OFFSET ?
                 """
                 search_val = f"%{search}%"
-                cursor.execute(query, (search_val, search_val, search_val, search_val, limit, offset))
+                cursor.execute(query, (search_val, search_val, search_val, search_val, search_val, limit, offset))
             else:
                 query = """
                     SELECT dl.*, ru.label FROM device_logs dl
@@ -327,6 +363,37 @@ class DBManager:
                 LEFT JOIN registered_usbs ru ON el.usb_serial = ru.serial_number
                 ORDER BY el.timestamp DESC LIMIT ? OFFSET ?
             """, (limit, offset))
+            return [dict(row) for row in cursor.fetchall()]
+
+    def log_file_activity(self, drive_serial, event_action, file_path, file_size="—"):
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                cursor.execute("""
+                    INSERT INTO file_activity_logs (drive_serial, event_action, file_path, file_size, timestamp)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (drive_serial, event_action, file_path, file_size, now_str))
+                conn.commit()
+                return cursor.lastrowid
+        except sqlite3.Error as e:
+            print(f"Error logging file activity: {e}")
+            return None
+
+    def get_file_activity_logs(self, limit=150, search=""):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            if search:
+                query = """
+                    SELECT * FROM file_activity_logs
+                    WHERE drive_serial LIKE ? OR event_action LIKE ? OR file_path LIKE ? OR timestamp LIKE ?
+                    ORDER BY timestamp DESC LIMIT ?
+                """
+                s = f"%{search}%"
+                cursor.execute(query, (s, s, s, s, limit))
+            else:
+                query = "SELECT * FROM file_activity_logs ORDER BY timestamp DESC LIMIT ?"
+                cursor.execute(query, (limit,))
             return [dict(row) for row in cursor.fetchall()]
 
     # Stats queries

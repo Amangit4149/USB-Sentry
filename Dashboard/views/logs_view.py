@@ -2,6 +2,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QFrame, QTableWidget, QTableWidgetItem, QHeaderView, 
                              QPushButton, QLineEdit, QTabWidget, QAbstractItemView)
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor, QFont
 
 class LogsView(QWidget):
     def __init__(self, db_manager, parent=None):
@@ -24,8 +25,8 @@ class LogsView(QWidget):
         
         # Search Filter Input
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Filter logs by Serial, Host, User...")
-        self.search_input.setFixedWidth(250)
+        self.search_input.setPlaceholderText("Filter logs by Serial, Host, User, Date (YYYY-MM-DD)...")
+        self.search_input.setFixedWidth(320)
         self.search_input.textChanged.connect(self.refresh_logs)
         top_layout.addWidget(self.search_input)
         
@@ -85,6 +86,20 @@ class LogsView(QWidget):
         alerts_layout.addWidget(self.table_alerts)
         self.tabs.addTab(self.tab_alerts, "Security Alerts Status")
 
+        # Tab 4: USB File Activity Logs (Matching Image 2)
+        self.tab_file_activity = QWidget()
+        file_act_layout = QVBoxLayout(self.tab_file_activity)
+        self.table_file_activity = QTableWidget(0, 5)
+        self.table_file_activity.setHorizontalHeaderLabels([
+            "Timestamp", "Drive / Serial", "Event Action", "File Path", "Size (Bytes)"
+        ])
+        self.table_file_activity.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        self.table_file_activity.horizontalHeader().setStretchLastSection(True)
+        self.table_file_activity.verticalHeader().setVisible(False)
+        self.table_file_activity.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        file_act_layout.addWidget(self.table_file_activity)
+        self.tabs.addTab(self.tab_file_activity, "📁 USB File Activity Logs")
+
         # Initial Refresh
         self.refresh_logs()
 
@@ -104,7 +119,8 @@ class LogsView(QWidget):
             if q and not (
                 q in str(log.get("serial_number", "")).lower() or 
                 q in str(log.get("computer_name", "")).lower() or 
-                q in str(log.get("username", "")).lower()
+                q in str(log.get("username", "")).lower() or
+                q in str(log.get("timestamp", "")).lower()
             ):
                 continue
                 
@@ -153,7 +169,7 @@ class LogsView(QWidget):
         # Apply local client filtering to location logs for search consistency
         if search_query:
             q = search_query.lower()
-            loc_logs = [l for l in loc_logs if q in (l.get("usb_serial") or "").lower() or q in (l.get("label") or "").lower() or q in (l.get("country") or "").lower() or q in (l.get("city") or "").lower()]
+            loc_logs = [l for l in loc_logs if q in (l.get("usb_serial") or "").lower() or q in (l.get("label") or "").lower() or q in (l.get("country") or "").lower() or q in (l.get("city") or "").lower() or q in (l.get("timestamp") or "").lower()]
             
         self.table_location.setRowCount(len(loc_logs))
         for row_idx, log in enumerate(loc_logs):
@@ -174,7 +190,7 @@ class LogsView(QWidget):
         alert_logs = self.db.get_email_logs(limit=150)
         if search_query:
             q = search_query.lower()
-            alert_logs = [a for a in alert_logs if q in (a.get("usb_serial") or "").lower() or q in (a.get("label") or "").lower() or q in (a.get("recipient") or "").lower()]
+            alert_logs = [a for a in alert_logs if q in (a.get("usb_serial") or "").lower() or q in (a.get("label") or "").lower() or q in (a.get("recipient") or "").lower() or q in (a.get("timestamp") or "").lower()]
             
         self.table_alerts.setRowCount(len(alert_logs))
         for row_idx, log in enumerate(alert_logs):
@@ -203,7 +219,39 @@ class LogsView(QWidget):
             self.table_alerts.setItem(row_idx, 4, stat_item)
             self.table_alerts.setItem(row_idx, 5, item_err)
 
+        # 4. Update USB File Activity Logs
+        file_logs = self.db.get_file_activity_logs(limit=150, search=search_query)
+        self.table_file_activity.setRowCount(len(file_logs))
+        for row_idx, log in enumerate(file_logs):
+            item_ts = QTableWidgetItem(str(log.get("timestamp", ""))[:19])
+            item_drive = QTableWidgetItem(str(log.get("drive_serial", "")))
+            
+            action = str(log.get("event_action", "")).upper()
+            item_act = QTableWidgetItem(action)
+            item_act.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+            if action == "MODIFIED":
+                item_act.setForeground(QColor("#facc15")) # Yellow/Gold
+            elif action == "CREATED":
+                item_act.setForeground(QColor("#4ade80")) # Green
+            elif action == "DELETED":
+                item_act.setForeground(QColor("#ef4444")) # Red
+            elif action == "RENAMED":
+                item_act.setForeground(QColor("#a78bfa")) # Purple
+
+            item_path = QTableWidgetItem(str(log.get("file_path", "")))
+            
+            size_val = str(log.get("file_size", "—"))
+            item_size = QTableWidgetItem(size_val)
+            item_size.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+            self.table_file_activity.setItem(row_idx, 0, item_ts)
+            self.table_file_activity.setItem(row_idx, 1, item_drive)
+            self.table_file_activity.setItem(row_idx, 2, item_act)
+            self.table_file_activity.setItem(row_idx, 3, item_path)
+            self.table_file_activity.setItem(row_idx, 4, item_size)
+
         # Auto-resize columns to fit their contents so data isn't truncated
         self.table_devices.resizeColumnsToContents()
         self.table_location.resizeColumnsToContents()
         self.table_alerts.resizeColumnsToContents()
+        self.table_file_activity.resizeColumnsToContents()

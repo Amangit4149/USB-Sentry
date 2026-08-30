@@ -61,8 +61,17 @@ class ReportGenerator:
                     for log in logs:
                         writer.writerow([
                             log.get("id"), log.get("usb_serial"), log.get("label"), log.get("recipient"),
-                            log.get("notification_type"), log.get("status"), log.get("error_message"),
-                            log.get("timestamp")
+                            log.get("notification_type"), log.get("status"), log.get("error_message"), log.get("timestamp")
+                        ])
+                elif log_type == "file_activity":
+                    logs = self.db.get_file_activity_logs(limit=1000)
+                    writer.writerow([
+                        "Log ID", "Drive / Serial", "Event Action", "File Path", "Size (Bytes)", "Timestamp"
+                    ])
+                    for log in logs:
+                        writer.writerow([
+                            log.get("id"), log.get("drive_serial"), log.get("event_action"),
+                            log.get("file_path"), log.get("file_size"), log.get("timestamp")
                         ])
             return True
         except Exception as e:

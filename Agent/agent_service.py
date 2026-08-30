@@ -5,6 +5,7 @@ from Config.config_manager import ConfigManager
 from Email.email_sender import EmailSender
 from Email.telegram_sender import TelegramSender
 from USBMonitor.monitor import USBMonitor
+from USBMonitor.file_watcher import USBFileWatcher
 from Agent.info_collector import InfoCollector
 
 class AgentService:
@@ -13,6 +14,7 @@ class AgentService:
         self.config = ConfigManager(config_path)
         self.email_sender = EmailSender(self.config, self.db)
         self.telegram_sender = TelegramSender(self.config, self.db)
+        self.file_watcher = USBFileWatcher(self.db)
         
         self.monitor = None
         self.active = False
@@ -141,6 +143,10 @@ class AgentService:
         if loc_id:
             print(f"Location tracking coordinate logged successfully (ID: {loc_id}).")
 
+        # Start real-time file activity watcher on inserted USB drive
+        if drive_letter:
+            self.file_watcher.start_watching(drive_letter, serial)
+
         # 5. Dispatch Notifications
         # SMTPLib Email Dispatcher
         print("Dispatching security email alert...")
@@ -154,6 +160,9 @@ class AgentService:
     def on_usb_removed(self, device_details: dict):
         """Callback triggered when any USB device is unmounted from the system."""
         serial = device_details.get("serial_number")
+        drive_letter = device_details.get("drive_letter")
+        if drive_letter:
+            self.file_watcher.stop_watching(drive_letter)
         if not serial:
             return
             
@@ -193,6 +202,8 @@ class AgentService:
             self.active = False
             if self.monitor:
                 self.monitor.stop()
+            if hasattr(self, 'file_watcher'):
+                self.file_watcher.stop_all()
             print("USB-Sentry monitoring agent stopped.")
 
 if __name__ == "__main__":
