@@ -73,12 +73,8 @@ class EmailSender:
             html_content = self.render_html_template(usb_info, sys_info, geo_info)
             msg.attach(MIMEText(html_content, 'html'))
 
-            # Setup SMTP server
-            server = smtplib.SMTP(smtp_server, smtp_port)
-            server.ehlo()
-            if smtp_port == 587:
-                server.starttls()
-                server.ehlo()
+            # Setup SMTP server with support for both Port 587 (STARTTLS) and Port 465 (SSL)
+            server = self._create_smtp_client(smtp_server, smtp_port, timeout=15)
             server.login(sender, password)
             server.sendmail(sender, recipient, msg.as_string())
             server.quit()
@@ -169,20 +165,68 @@ class EmailSender:
             msg["From"] = f"USB-Sentry <{sender_email}>"
             msg["To"] = receiver_email
             msg.attach(MIMEText(html, "html"))
-            with smtplib.SMTP(smtp_server, smtp_port) as server:
-                server.ehlo()
-                server.starttls()
-                server.login(sender_email, sender_password)
-                server.sendmail(sender_email, receiver_email, msg.as_string())
+            server = self._create_smtp_client(smtp_server, smtp_port, timeout=15)
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, receiver_email, msg.as_string())
+            server.quit()
             print(f"Unknown device alert email sent to {receiver_email}")
         except Exception as e:
             print(f"Failed to send unknown device alert email: {e}")
 
+    @staticmethod
+    def _create_smtp_client(smtp_server: str, smtp_port: int, timeout: int = 15):
+        """
+        Creates and configures an SMTP client supporting both STARTTLS (587) and Direct SSL (465).
+        """
+        port = int(smtp_port)
+        if port == 465:
+            server = smtplib.SMTP_SSL(smtp_server, port, timeout=timeout)
+        else:
+            server = smtplib.SMTP(smtp_server, port, timeout=timeout)
+            server.ehlo()
+            if port == 587 or server.has_extn('starttls'):
+                server.starttls()
+                server.ehlo()
+        return server
+
     def test_connection(self, smtp_server, smtp_port, sender, password, receiver) -> tuple:
-        """Tests the SMTP configuration with a test email."""
+        """
+        Tests the SMTP configuration with a test email.
+        Provides clear, actionable guidance if Google/SMTP drops the connection or rejects login.
+        """
         try:
+            port = int(smtp_port)
+            server = self._create_smtp_client(smtp_server, port, timeout=15)
+            
+            try:
+                server.login(sender, password)
+            except smtplib.SMTPServerDisconnected as dis_err:
+                msg = (
+                    "SMTP Connection closed unexpectedly by server during authentication.\n\n"
+                    "Why this happens with Gmail / Google Workspace:\n"
+                    "1. Google accounts require a 16-character 'Google App Password', not your standard account password.\n"
+                    "2. Institutional/university accounts (@paruluniversity.ac.in) frequently have SMTP/App Passwords disabled by domain administrators.\n"
+                    "3. 2-Step Verification must be enabled on the sender Google Account.\n\n"
+                    "How to resolve:\n"
+                    "• Go to https://myaccount.google.com/apppasswords\n"
+                    "• Generate an App Password (name it 'USB-Sentry') and paste the 16 letters into Sender Password.\n"
+                    "• If your university account blocks App Passwords, use a personal Gmail account as Sender (you can keep your university email as Receiver)."
+                )
+                return False, msg
+            except smtplib.SMTPAuthenticationError as auth_err:
+                msg = (
+                    f"Authentication Failed (Code {auth_err.smtp_code}):\n\n"
+                    "Gmail/SMTP rejected the username or password.\n\n"
+                    "Checklist:\n"
+                    "1. Do NOT use your normal email account password.\n"
+                    "2. Turn on 2-Step Verification in Google Account Security.\n"
+                    "3. Generate a 16-character App Password at https://myaccount.google.com/apppasswords and paste it here."
+                )
+                return False, msg
+
+            # Construct and send test message
             msg = MIMEMultipart('alternative')
-            msg['Subject'] = "USB-Sentry - SMTP Connection Test"
+            msg['Subject'] = "🛡️ USB-Sentry - SMTP Connection Test"
             msg['From'] = f"USB-Sentry Test <{sender}>"
             msg['To'] = receiver
             
@@ -201,17 +245,22 @@ class EmailSender:
             """
             msg.attach(MIMEText(html, 'html'))
             
-            server = smtplib.SMTP(smtp_server, int(smtp_port))
-            server.ehlo()
-            if int(smtp_port) == 587:
-                server.starttls()
-                server.ehlo()
-            server.login(sender, password)
             server.sendmail(sender, receiver, msg.as_string())
             server.quit()
-            return True, "SMTP connection test succeeded. Test email sent!"
+            return True, "SMTP connection test succeeded! Test email sent successfully."
         except Exception as e:
-            return False, f"SMTP Connection failed: {str(e)}"
+            err_text = str(e)
+            if "Connection unexpectedly closed" in err_text:
+                return False, (
+                    "SMTP Connection closed unexpectedly by server.\n\n"
+                    "Google disconnected the session during authentication.\n\n"
+                    "Fix:\n"
+                    "1. Turn on 2-Step Verification on your Google Account.\n"
+                    "2. Generate a 16-character App Password at https://myaccount.google.com/apppasswords.\n"
+                    "3. Paste the 16-character App Password into 'Sender Password' (not your normal password).\n"
+                    "4. Note: University Google Workspace domains (@paruluniversity.ac.in) often restrict student SMTP access. If so, use a personal @gmail.com as Sender."
+                )
+            return False, f"SMTP Connection failed: {err_text}"
 
     def render_html_template(self, usb_info: dict, sys_info: dict, geo_info: dict) -> str:
         """Generates a premium dark-themed HTML alert email for registered USB devices."""

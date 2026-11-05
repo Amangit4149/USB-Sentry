@@ -57,12 +57,22 @@ class SettingsView(QWidget):
         self.receiver_email_input = QLineEdit()
         
         self.email_form.addRow("SMTP Server:", self.smtp_server_input)
-        self.email_form.addRow("SMTP Port (TLS):", self.smtp_port_input)
+        self.email_form.addRow("SMTP Port (587 TLS / 465 SSL):", self.smtp_port_input)
         self.email_form.addRow("Sender Email:", self.sender_email_input)
         self.email_form.addRow("Sender Password:", self.sender_pwd_input)
         self.email_form.addRow("Receiver Email:", self.receiver_email_input)
         
         email_layout.addLayout(self.email_form)
+        
+        # Guidance hint for Gmail / App Passwords
+        smtp_hint = QLabel(
+            "💡 <b>Gmail Setup Note:</b> Google requires a 16-character <b>App Password</b> "
+            "(from <i>myaccount.google.com/apppasswords</i>). Standard login passwords are blocked by Google.<br/>"
+            "Institutional/university accounts often restrict external SMTP; use a personal @gmail.com as Sender if needed."
+        )
+        smtp_hint.setStyleSheet("color: #94a3b8; font-size: 11px; margin: 4px 0 8px 0; line-height: 1.4;")
+        smtp_hint.setWordWrap(True)
+        email_layout.addWidget(smtp_hint)
         
         # Test Email Button
         self.test_email_btn = QPushButton("Send Test Email")
