@@ -6,16 +6,41 @@ import hashlib
 import threading
 import time
 import secrets
+import sys
+
+# WMI import with diagnostic feedback
 try:
     import wmi
-except Exception:
+    _WMI_AVAILABLE = True
+except ImportError:
     wmi = None
+    _WMI_AVAILABLE = False
+    print("⚠️  WARNING: 'wmi' Python module not installed. USB monitoring requires it.")
+    print("   Install with: pip install wmi pywin32")
+except Exception as e:
+    wmi = None
+    _WMI_AVAILABLE = False
+    print(f"⚠️  WARNING: 'wmi' module failed to load: {e}")
+
+# pythoncom import check (required for WMI in non-main threads)
+try:
+    import pythoncom
+    _PYTHONCOM_AVAILABLE = True
+except ImportError:
+    pythoncom = None
+    _PYTHONCOM_AVAILABLE = False
+    print("⚠️  WARNING: 'pythoncom' (pywin32) not installed. WMI thread support requires it.")
+    print("   Install with: pip install pywin32")
+except Exception:
+    pythoncom = None
+    _PYTHONCOM_AVAILABLE = False
+
 from Config.paths import get_signing_key_path
 
 def get_signing_key() -> bytes:
     """
     Retrieves or generates an independent per-user, per-installation 32-byte signing key.
-    Stored securely in the user's isolated data directory (%LOCALAPPDATA%\\USB-Sentry\\signing.key).
+    Stored securely in the user's isolated data directory (%LOCALAPPDATA%\\\\USB-Sentry\\\\signing.key).
     """
     key_file = get_signing_key_path()
     try:
@@ -75,15 +100,17 @@ class USBMonitor(threading.Thread):
             
         # Standard USBSTOR PNP format: USBSTOR\DISK&VEN_SANDISK&PROD_CRUZER_GLIDE&REV_1.00\4C53000...
         # We can try to look up parent USB device using WMI to find real VID/PID
+        if not _WMI_AVAILABLE or wmi is None:
+            return "Unknown", "Unknown"
         try:
             c = wmi.WMI()
             parts = pnp_id.split('\\')
             if len(parts) >= 3:
                 serial_part = parts[-1].split('&')[0]
                 # Query USB entities
-                for device in c.Win32_PnPEntity(InterfaceClass="{a5fe4bf2-2801-11d0-ef88-00c04fd7d062}"):
+                for device in c.Win32_PnPEntity():
                     dev_id = device.DeviceID or ""
-                    if serial_part in dev_id:
+                    if serial_part in dev_id and "USB" in dev_id:
                         vid_m = re.search(r'VID_([0-9A-Fa-f]{4})', dev_id, re.IGNORECASE)
                         pid_m = re.search(r'PID_([0-9A-Fa-f]{4})', dev_id, re.IGNORECASE)
                         if vid_m and pid_m:
@@ -92,6 +119,20 @@ class USBMonitor(threading.Thread):
             pass
             
         return "Unknown", "Unknown"
+
+    def _ensure_wmi_connection(self) -> bool:
+        """Ensures a valid WMI connection exists. Returns True if successful."""
+        if self._wmi_conn is not None:
+            return True
+        if not _WMI_AVAILABLE or wmi is None:
+            return False
+        try:
+            self._wmi_conn = wmi.WMI()
+            return True
+        except Exception as e:
+            print(f"❌ Failed to create WMI connection: {e}")
+            self._wmi_conn = None
+            return False
 
     def get_drive_details(self, drive_letter: str) -> dict:
         """Gets detailed USB device hardware info mapped from a drive letter."""
@@ -105,10 +146,10 @@ class USBMonitor(threading.Thread):
             "is_usb": False
         }
         
+        if not self._ensure_wmi_connection():
+            return details
+        
         try:
-            if not self._wmi_conn:
-                self._wmi_conn = wmi.WMI()
-                
             # Get LogicalDisk details
             logical_disks = self._wmi_conn.Win32_LogicalDisk(DeviceID=drive_letter)
             if not logical_disks:
@@ -145,6 +186,8 @@ class USBMonitor(threading.Thread):
                     break
         except Exception as e:
             print(f"Error fetching USB details for {drive_letter}: {e}")
+            # Reset WMI connection on error so it reconnects next time
+            self._wmi_conn = None
             
         return details
 
@@ -190,76 +233,92 @@ class USBMonitor(threading.Thread):
         return None
 
     def run(self):
-        """Thread main loop: polls or watches WMI events for USB mount/unmount."""
+        """Thread main loop: uses polling to detect USB mount/unmount events."""
         self.running = True
-        print("USB-Sentry monitoring engine started...")
+        print("=" * 60)
+        print("  USB-Sentry Monitoring Engine Starting...")
+        print(f"  WMI module available: {_WMI_AVAILABLE}")
+        print(f"  pythoncom available:  {_PYTHONCOM_AVAILABLE}")
+        print(f"  Platform:             {sys.platform}")
+        print("=" * 60)
         
-        # Initialize WMI in this thread context (required for COM threads)
-        pythoncom_initialized = False
-        try:
-            import pythoncom
-            pythoncom.CoInitialize()
-            pythoncom_initialized = True
-        except Exception:
-            pass
-
-        try:
-            self._wmi_conn = wmi.WMI()
-            
-            # WMI event watcher for logical disk creation (DriveType = 2 is removable)
-            creation_watcher = self._wmi_conn.watch_for(
-                notification_type="Creation",
-                wmi_class="Win32_LogicalDisk",
-                DriveType=2
-            )
-            
-            deletion_watcher = self._wmi_conn.watch_for(
-                notification_type="Deletion",
-                wmi_class="Win32_LogicalDisk",
-                DriveType=2
-            )
-            
-        except Exception as e:
-            print(f"Failed to start WMI event watchers: {e}. Falling back to active polling.")
-            self._run_polling()
-            if pythoncom_initialized:
-                pythoncom.CoUninitialize()
+        # Critical check: WMI is required for USB detection on Windows
+        if not _WMI_AVAILABLE or wmi is None:
+            print("❌ CRITICAL: Cannot start USB monitoring without 'wmi' module!")
+            print("   Install required packages: pip install wmi pywin32")
+            self.running = False
             return
 
-        # Event loop using WMI watcher
-        while self.running:
+        # Initialize COM for this thread (required for WMI in non-main threads)
+        com_initialized = False
+        if _PYTHONCOM_AVAILABLE and pythoncom is not None:
             try:
-                # We do a short timeout watch using time-sliced checks to keep thread interruptible
-                # WMI watcher() blocks, so to make it interruptible we poll disk lists or run with small delays.
-                # Since watcher blocks, we can check for logical drive changes using custom query matching.
-                # To prevent thread lock when shutting down, we use a timeout mechanism on watcher.
-                # WMI watch_for doesn't support timeout in python-wmi easily, so we can poll every 2 seconds
-                # which is extremely reliable and lightweight.
-                self._run_polling()
-                break
+                pythoncom.CoInitialize()
+                com_initialized = True
+                print("✅ COM initialized successfully for monitor thread.")
             except Exception as e:
-                print(f"WMI Watcher exception: {e}")
-                time.sleep(2)
+                print(f"⚠️  COM initialization failed: {e}")
+                print("   WMI may not work correctly in this thread.")
+        else:
+            print("⚠️  pythoncom not available — attempting WMI without explicit COM init.")
 
-        if pythoncom_initialized:
+        try:
+            # Test WMI connection before entering polling loop
             try:
-                pythoncom.CoUninitialize()
-            except Exception:
-                pass
+                self._wmi_conn = wmi.WMI()
+                print("✅ WMI connection established successfully.")
+            except Exception as e:
+                print(f"❌ Initial WMI connection failed: {e}")
+                print("   Will retry in polling loop...")
+                self._wmi_conn = None
+
+            # Run the polling-based USB detection loop
+            self._run_polling()
+        except Exception as e:
+            print(f"❌ USB monitoring engine crashed: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            self.running = False
+            if com_initialized:
+                try:
+                    pythoncom.CoUninitialize()
+                except Exception:
+                    pass
+            print("USB-Sentry monitoring engine stopped.")
 
     def _run_polling(self):
-        """Poller fallback/primary: compares active drive letters to detect insertions/removals."""
-        # Get initial list
+        """Poller: compares active drive letters every 2 seconds to detect insertions/removals."""
+        # Build initial snapshot of currently connected removable drives
         active_drives = {}
-        try:
-            self._wmi_conn = wmi.WMI()
-            for disk in self._wmi_conn.Win32_LogicalDisk(DriveType=2):
-                active_drives[disk.DeviceID] = self.get_drive_details(disk.DeviceID)
-        except Exception as e:
-            print(f"Initial polling scan failed: {e}")
+        if self._ensure_wmi_connection():
+            try:
+                for disk in self._wmi_conn.Win32_LogicalDisk(DriveType=2):
+                    details = self.get_drive_details(disk.DeviceID)
+                    if details["is_usb"]:
+                        active_drives[disk.DeviceID] = details
+                        print(f"   Pre-existing USB drive: {disk.DeviceID} (Serial: {details.get('serial_number', 'N/A')})")
+                if not active_drives:
+                    print("   No pre-existing USB drives found.")
+            except Exception as e:
+                print(f"⚠️  Initial USB scan failed: {e}")
+                self._wmi_conn = None
+        else:
+            print("⚠️  WMI not available for initial scan — will retry...")
+
+        print("🔄 USB polling loop started (checking every 2 seconds)...")
+        poll_count = 0
 
         while self.running:
             time.sleep(2.0)
+            poll_count += 1
+            
+            # Ensure WMI connection is alive
+            if not self._ensure_wmi_connection():
+                if poll_count % 15 == 0:  # Log every 30 seconds
+                    print("⚠️  WMI connection unavailable — retrying...")
+                continue
+            
             try:
                 current_disks = self._wmi_conn.Win32_LogicalDisk(DriveType=2)
                 current_drive_ids = [disk.DeviceID for disk in current_disks]
@@ -268,15 +327,25 @@ class USBMonitor(threading.Thread):
                 for disk in current_disks:
                     drive_id = disk.DeviceID
                     if drive_id not in active_drives:
-                        # Drive inserted!
-                        print(f"New logical drive detected: {drive_id}")
-                        # Wait a split second for mounting to stabilize
-                        time.sleep(0.5)
+                        # New drive detected!
+                        print(f"\n🔌 New removable drive detected: {drive_id}")
+                        # Wait a moment for the drive to stabilize
+                        time.sleep(0.8)
                         details = self.get_drive_details(drive_id)
                         if details["is_usb"]:
                             active_drives[drive_id] = details
+                            print(f"   Serial: {details.get('serial_number', 'N/A')}")
+                            print(f"   Label:  {details.get('label', 'Unknown')}")
+                            print(f"   Model:  {details.get('manufacturer', 'Unknown')}")
                             if self.insertion_callback:
-                                self.insertion_callback(details)
+                                try:
+                                    self.insertion_callback(details)
+                                except Exception as cb_err:
+                                    print(f"❌ Insertion callback error: {cb_err}")
+                                    import traceback
+                                    traceback.print_exc()
+                        else:
+                            print(f"   Drive {drive_id} is not a USB removable drive (DriveType mismatch).")
                                 
                 # Check for removals
                 removed_drives = []
@@ -285,18 +354,21 @@ class USBMonitor(threading.Thread):
                         removed_drives.append(drive_id)
                         
                 for drive_id in removed_drives:
-                    # Drive removed!
-                    print(f"Logical drive removed: {drive_id}")
+                    print(f"\n⏏️  Removable drive removed: {drive_id}")
                     details = active_drives.pop(drive_id)
                     if self.removal_callback:
-                        self.removal_callback(details)
+                        try:
+                            self.removal_callback(details)
+                        except Exception as cb_err:
+                            print(f"❌ Removal callback error: {cb_err}")
+                            import traceback
+                            traceback.print_exc()
                         
             except Exception as e:
                 # WMI can raise errors during system standby/resume, reset connection
-                try:
-                    self._wmi_conn = wmi.WMI()
-                except Exception:
-                    pass
+                if poll_count % 15 == 0:
+                    print(f"⚠️  WMI polling error: {e} — reconnecting...")
+                self._wmi_conn = None
                 time.sleep(2)
 
     def stop(self):

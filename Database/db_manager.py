@@ -147,6 +147,32 @@ class DBManager:
                 )
             """)
             conn.commit()
+
+            # Enterprise Audit Trail (SOC2 / ISO 27001 Compliance)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS audit_trail (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    admin_username TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    details TEXT,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.commit()
+
+            # Data Loss Prevention (DLP) Incident Logs
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS dlp_incident_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    drive_serial TEXT NOT NULL,
+                    file_path TEXT NOT NULL,
+                    rule_triggered TEXT NOT NULL,
+                    severity TEXT NOT NULL,
+                    matched_sample TEXT,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.commit()
             # Clean installation: NO sample records are seeded. Starts completely empty.
 
     # User Management functions
@@ -449,5 +475,57 @@ class DBManager:
                 GROUP BY ru.label
             """)
             stats['distribution'] = [dict(row) for row in cursor.fetchall()]
+
+            # Total DLP Incidents
+            cursor.execute("SELECT COUNT(*) FROM dlp_incident_logs")
+            stats['total_dlp_incidents'] = cursor.fetchone()[0]
             
             return stats
+
+    # Enterprise Audit Trail Methods
+    def log_audit_event(self, admin_username: str, action: str, details: str = ""):
+        """Records an immutable audit trail entry for SOC compliance."""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                cursor.execute("""
+                    INSERT INTO audit_trail (admin_username, action, details, timestamp)
+                    VALUES (?, ?, ?, ?)
+                """, (admin_username, action, details, now_str))
+                conn.commit()
+                return cursor.lastrowid
+        except Exception as e:
+            print(f"Error logging audit trail: {e}")
+            return None
+
+    def get_audit_logs(self, limit: int = 150):
+        """Returns recent administrator actions for compliance reporting."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM audit_trail ORDER BY timestamp DESC LIMIT ?", (limit,))
+            return [dict(row) for row in cursor.fetchall()]
+
+    # DLP Incident Logging Methods
+    def log_dlp_incident(self, drive_serial: str, file_path: str, rule_triggered: str, severity: str = "HIGH", matched_sample: str = ""):
+        """Records a Data Loss Prevention violation."""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                cursor.execute("""
+                    INSERT INTO dlp_incident_logs (drive_serial, file_path, rule_triggered, severity, matched_sample, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (drive_serial, file_path, rule_triggered, severity, matched_sample, now_str))
+                conn.commit()
+                return cursor.lastrowid
+        except Exception as e:
+            print(f"Error logging DLP incident: {e}")
+            return None
+
+    def get_dlp_incidents(self, limit: int = 150):
+        """Returns recent DLP violations."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM dlp_incident_logs ORDER BY timestamp DESC LIMIT ?", (limit,))
+            return [dict(row) for row in cursor.fetchall()]

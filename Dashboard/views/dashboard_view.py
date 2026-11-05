@@ -3,7 +3,7 @@ import sys
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QFrame, QTableWidget, QTableWidgetItem,
                              QHeaderView, QPushButton, QSizePolicy)
-from PyQt6.QtCore import Qt, pyqtSignal, QSize
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTimer
 from PyQt6.QtGui import QColor, QFont
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -20,6 +20,16 @@ class DashboardView(QWidget):
         self.agent = agent_service
         self.startup_mgr = StartupManager()
         self.init_ui()
+        
+        # Auto-refresh dashboard stats every 8 seconds
+        self._auto_refresh_timer = QTimer(self)
+        self._auto_refresh_timer.timeout.connect(self._auto_refresh)
+        self._auto_refresh_timer.start(8000)
+    
+    def _auto_refresh(self):
+        """Auto-refresh when visible."""
+        if self.isVisible():
+            self.refresh_data()
 
     # ─────────────────────────────────────────────────────────────────────────
     def init_ui(self):

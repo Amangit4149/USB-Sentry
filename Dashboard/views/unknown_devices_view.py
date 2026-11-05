@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QAbstractItemView, QSplitter, QScrollArea, QGridLayout,
     QLineEdit, QSizePolicy
 )
-from PyQt6.QtCore import Qt, QDateTime
+from PyQt6.QtCore import Qt, QDateTime, QTimer
 from PyQt6.QtGui import QColor, QFont
 
 
@@ -20,6 +20,15 @@ class UnknownDevicesView(QWidget):
         self.db = db_manager
         self._all_rows = []
         self.init_ui()
+        
+        # Auto-refresh every 5 seconds when visible
+        self._auto_refresh_timer = QTimer(self)
+        self._auto_refresh_timer.timeout.connect(self._auto_refresh)
+        self._auto_refresh_timer.start(5000)
+    
+    def _auto_refresh(self):
+        if self.isVisible():
+            self.refresh()
 
     # ─────────────────────────────────────────────────────────────────────────
     def init_ui(self):

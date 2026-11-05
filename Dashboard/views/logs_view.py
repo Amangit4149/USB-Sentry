@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                              QFrame, QTableWidget, QTableWidgetItem, QHeaderView, 
                              QPushButton, QLineEdit, QTabWidget, QAbstractItemView)
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor, QFont
 
 class LogsView(QWidget):
@@ -9,6 +9,16 @@ class LogsView(QWidget):
         super().__init__(parent)
         self.db = db_manager
         self.init_ui()
+        
+        # Auto-refresh timer: refresh logs every 5 seconds when this view is visible
+        self._auto_refresh_timer = QTimer(self)
+        self._auto_refresh_timer.timeout.connect(self._auto_refresh)
+        self._auto_refresh_timer.start(5000)  # 5 seconds
+    
+    def _auto_refresh(self):
+        """Auto-refresh logs only when this widget is currently visible."""
+        if self.isVisible():
+            self.refresh_logs()
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -107,13 +117,26 @@ class LogsView(QWidget):
         """Fetches fresh log collections from SQLite database and binds to GUI Tables."""
         search_query = self.search_input.text().strip()
         
-        # 1. Update Connection Logs (Merge Registered and Unknown)
-        known_logs = self.db.get_device_logs(limit=150, search=search_query)
-        unknown_logs = self.db.get_unknown_device_events(limit=150)
+        # 1. Update Connection Logs (Merge Registered and Unknown, deduplicated)
+        known_logs = self.db.get_device_logs(limit=200, search=search_query)
+        unknown_logs = self.db.get_unknown_device_events(limit=200)
+        
+        # Build a set of timestamps+serials already in device_logs to deduplicate
+        seen_keys = set()
+        for log in known_logs:
+            ts = str(log.get("timestamp", ""))[:19]
+            ser = str(log.get("usb_serial", ""))
+            seen_keys.add((ts, ser))
         
         # Format unknown logs to match the structure of known logs for display
         formatted_unknown = []
         for log in unknown_logs:
+            # Skip if already present in device_logs (agent now writes to both tables)
+            ts = str(log.get("timestamp", ""))[:19]
+            ser = str(log.get("serial_number", ""))
+            if (ts, ser) in seen_keys:
+                continue
+            
             # Apply search filter manually for unknown logs
             q = search_query.lower()
             if q and not (
@@ -126,7 +149,7 @@ class LogsView(QWidget):
                 
             formatted_unknown.append({
                 "timestamp": log.get("timestamp"),
-                "label": "Unknown",
+                "label": "⚠️ Unknown",
                 "usb_serial": log.get("serial_number"),
                 "event_type": "UNKNOWN DEVICE",
                 "computer_name": log.get("computer_name"),
@@ -138,8 +161,8 @@ class LogsView(QWidget):
         # Combine and sort by timestamp descending
         all_logs = known_logs + formatted_unknown
         all_logs.sort(key=lambda x: str(x.get("timestamp", "")), reverse=True)
-        # Cap at 150 total for performance
-        all_logs = all_logs[:150]
+        # Cap at 200 total for performance
+        all_logs = all_logs[:200]
 
         self.table_devices.setRowCount(len(all_logs))
         for row_idx, log in enumerate(all_logs):
@@ -150,13 +173,15 @@ class LogsView(QWidget):
             event_type = str(log.get("event_type", ""))
             evt_item = QTableWidgetItem(event_type)
             if event_type == "INSERTION":
-                evt_item.setForeground(Qt.GlobalColor.green)
+                evt_item.setForeground(QColor("#4ade80"))  # Green
+            elif event_type == "REMOVAL":
+                evt_item.setForeground(QColor("#facc15"))  # Yellow/Gold
             elif event_type == "UNKNOWN DEVICE":
-                evt_item.setForeground(Qt.GlobalColor.red)
-                evt_item.setFont(self.font())
-                evt_item.font().setBold(True)
+                evt_item.setForeground(QColor("#ef4444"))  # Red
+                bold_font = QFont("Segoe UI", 9, QFont.Weight.Bold)
+                evt_item.setFont(bold_font)
             else:
-                evt_item.setForeground(Qt.GlobalColor.red)
+                evt_item.setForeground(QColor("#94a3b8"))  # Gray
             self.table_devices.setItem(row_idx, 3, evt_item)
             
             self.table_devices.setItem(row_idx, 4, QTableWidgetItem(str(log.get("computer_name", ""))))
