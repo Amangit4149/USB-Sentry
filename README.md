@@ -33,10 +33,10 @@ USB-Sentry/
 │   ├── info_collector.py      # System forensics & IP geolocation retriever
 │   └── startup_manager.py     # Windows Registry autostart installer
 ├── Config/
-│   ├── config_manager.py      # Encrypted settings reader & writer
-│   └── settings.enc           # AES-256 encrypted configuration file
+│   ├── paths.py               # Central user-isolated AppData path resolver
+│   └── config_manager.py      # Encrypted settings reader & writer
 ├── Dashboard/
-│   ├── app.py                 # Main PyQt6 graphical portal launcher
+│   ├── app.py                 # Main PyQt6 graphical portal & setup wizard
 │   ├── styles.py              # Dark theme CSS/QSS styling definitions
 │   └── views/
 │       ├── dashboard_view.py  # System overview metrics & activity graphs
@@ -47,13 +47,13 @@ USB-Sentry/
 │       ├── unknown_devices.py # Unregistered USB detection & stats
 │       └── settings_view.py   # Admin credentials, SMTP & Telegram config
 ├── Database/
-│   ├── db_manager.py          # SQLite database schema & operations
-│   └── guardian.db            # Local event & device database
+│   └── db_manager.py          # SQLite database schema & operations
 ├── Email/
 │   ├── email_sender.py        # HTML email template generator & SMTP client
 │   └── telegram_sender.py     # Telegram Bot API notification engine
 ├── Encryption/
-│   └── crypto_helper.py       # Key derivation using motherboard UUID & DPAPI
+│   ├── crypto_helper.py       # User-bound AES key derivation & DPAPI
+│   └── password_manager.py    # Salted password hashing (Argon2id/bcrypt/Scrypt)
 ├── Reports/
 │   └── report_generator.py    # ReportLab PDF compilation & CSV export logic
 ├── USBMonitor/
@@ -104,11 +104,11 @@ python main.py
 ```
 *(Or double-click `Launch Guardian.bat`)*
 
-**Default Admin Credentials**:
-- **Username**: `admin`
-- **Password**: `admin`
-
-*(Note: You can change the password at any time in **System Settings** inside the dashboard.)*
+**First-Launch Security Setup**:
+- On initial launch, USB-Sentry prompts you to establish your unique administrator credentials.
+- Passwords are encrypted and hashed using salted algorithms (Argon2id/bcrypt/Scrypt) and stored locally.
+- No shared default credentials exist, ensuring full security and isolation.
+- You can change your password at any time in **System Settings** inside the dashboard.
 
 ---
 
@@ -171,9 +171,12 @@ python main.py --unregister-startup
 
 ---
 
-## 🔒 Security & Privacy
+## 🔒 Security, Privacy & Data Isolation
 
-All sensitive credentials stored by USB-Sentry are encrypted using **AES-256 encryption** with keys derived from the host computer's motherboard BIOS UUID and protected via the Windows **Data Protection API (DPAPI)**. Encrypted settings files cannot be decrypted on a different machine.
+- **Complete Local Data Isolation**: All runtime databases (`guardian.db`), encrypted configuration files (`settings.enc`), and signing keys (`signing.key`) are stored strictly in the user's isolated Windows application directory: `%LOCALAPPDATA%\USB-Sentry\`.
+- **Zero Cloud / Git Leakage**: No runtime databases or private credentials reside inside the Git working directory. Cloning or updating the project from GitHub starts clean and never overwrites existing local data.
+- **Hardware- & User-Bound Encryption**: Sensitive credentials (SMTP password, Telegram token) are encrypted via AES-256 (Fernet) bound to the machine's hardware GUID and protected using the Windows **Data Protection API (DPAPI)** keyed to the specific logged-in Windows account.
+- **Strong Salted Authentication**: Passwords are protected using modern salted algorithms (Argon2id, bcrypt, or Scrypt) with timing-safe comparisons to prevent brute force and timing attacks.
 
 ---
 

@@ -306,7 +306,8 @@ class ReportGenerator:
             # Adjust styling bounds
             plt.tight_layout()
             
-            temp_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp_chart.png")
+            import tempfile
+            temp_path = os.path.join(tempfile.gettempdir(), f"usb_sentry_chart_{os.getpid()}.png")
             plt.savefig(temp_path, dpi=200)
             plt.close()
             return temp_path

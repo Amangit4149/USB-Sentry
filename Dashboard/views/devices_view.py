@@ -1,6 +1,9 @@
 import os
 import json
-import wmi
+try:
+    import wmi
+except Exception:
+    wmi = None
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                              QFrame, QTableWidget, QTableWidgetItem, QHeaderView, 
                              QPushButton, QLineEdit, QFormLayout, QComboBox, QMessageBox)
@@ -120,12 +123,13 @@ class DevicesView(QWidget):
         self.drive_selector.clear()
         self.drive_selector.addItem("Select Connected USB...", None)
         try:
-            if not self._wmi_conn:
+            if not self._wmi_conn and wmi:
                 self._wmi_conn = wmi.WMI()
-            # Removable drives are DriveType 2
-            for disk in self._wmi_conn.Win32_LogicalDisk(DriveType=2):
-                vol_name = disk.VolumeName or "Unnamed"
-                self.drive_selector.addItem(f"{disk.DeviceID} ({vol_name})", disk.DeviceID)
+            if self._wmi_conn:
+                # Removable drives are DriveType 2
+                for disk in self._wmi_conn.Win32_LogicalDisk(DriveType=2):
+                    vol_name = disk.VolumeName or "Unnamed"
+                    self.drive_selector.addItem(f"{disk.DeviceID} ({vol_name})", disk.DeviceID)
         except Exception as e:
             print(f"Error listing removable drives: {e}")
 

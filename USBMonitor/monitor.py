@@ -5,10 +5,38 @@ import hmac
 import hashlib
 import threading
 import time
-import wmi
+import secrets
+try:
+    import wmi
+except Exception:
+    wmi = None
+from Config.paths import get_signing_key_path
 
-# Secret key for signing configuration files on the USB drives
-SIGNING_KEY = b"SmartUSBGuardianMasterSigningKeySecret123"
+def get_signing_key() -> bytes:
+    """
+    Retrieves or generates an independent per-user, per-installation 32-byte signing key.
+    Stored securely in the user's isolated data directory (%LOCALAPPDATA%\\USB-Sentry\\signing.key).
+    """
+    key_file = get_signing_key_path()
+    try:
+        if os.path.exists(key_file):
+            with open(key_file, "rb") as f:
+                key = f.read().strip()
+                if len(key) >= 16:
+                    return key
+        # Generate new cryptographically secure 32-byte key
+        new_key = secrets.token_bytes(32)
+        os.makedirs(os.path.dirname(os.path.abspath(key_file)), exist_ok=True)
+        with open(key_file, "wb") as f:
+            f.write(new_key)
+        return new_key
+    except Exception:
+        import getpass
+        fingerprint = f"USBSentry-SigningKey::{getpass.getuser()}::{os.environ.get('COMPUTERNAME', '')}"
+        return hashlib.sha256(fingerprint.encode("utf-8")).digest()
+
+# Module-level variable for backwards compatibility
+SIGNING_KEY = get_signing_key()
 
 class USBMonitor(threading.Thread):
     def __init__(self, insertion_callback=None, removal_callback=None):
@@ -133,7 +161,7 @@ class USBMonitor(threading.Thread):
                 
             # Recreate digest
             message = f"{serial}:{email}".encode('utf-8')
-            expected_sig = hmac.new(SIGNING_KEY, message, hashlib.sha256).hexdigest()
+            expected_sig = hmac.new(get_signing_key(), message, hashlib.sha256).hexdigest()
             return hmac.compare_digest(expected_sig, signature)
         except Exception:
             return False
@@ -142,7 +170,7 @@ class USBMonitor(threading.Thread):
     def generate_usb_metadata_signature(cls, serial: str, email: str) -> str:
         """Generates HMAC-SHA256 signature for USB configuration verification."""
         message = f"{serial}:{email}".encode('utf-8')
-        return hmac.new(SIGNING_KEY, message, hashlib.sha256).hexdigest()
+        return hmac.new(get_signing_key(), message, hashlib.sha256).hexdigest()
 
     def check_usb_for_metadata(self, drive_letter: str) -> dict:
         """Checks if a plugged USB drive contains a valid .usb_guardian.json metadata file."""

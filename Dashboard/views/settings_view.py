@@ -6,12 +6,17 @@ from Config.config_manager import ConfigManager
 from Database.db_manager import DBManager
 from Email.email_sender import EmailSender
 from Email.telegram_sender import TelegramSender
+from Encryption.password_manager import PasswordManager
 
 class SettingsView(QWidget):
-    def __init__(self, db_manager, config_manager, parent=None):
+    def __init__(self, db_manager, config_manager, current_user=None, parent=None):
+        if isinstance(current_user, QWidget) and parent is None:
+            parent = current_user
+            current_user = None
         super().__init__(parent)
         self.db = db_manager
         self.config = config_manager
+        self.current_user = current_user
         self.email_sender = EmailSender(self.config, self.db)
         self.telegram_sender = TelegramSender(self.config, self.db)
         self.init_ui()
@@ -258,7 +263,7 @@ class SettingsView(QWidget):
             QMessageBox.critical(self, "Telegram Verification Failed", message)
 
     def change_admin_password(self):
-        """Changes the admin password for Dashboard logins."""
+        """Changes the admin password for Dashboard logins using secure salted hashing."""
         current_pwd = self.current_pwd_input.text()
         new_pwd = self.new_pwd_input.text()
         confirm_pwd = self.confirm_pwd_input.text()
@@ -267,35 +272,44 @@ class SettingsView(QWidget):
             QMessageBox.warning(self, "Validation Error", "All fields are required to update password.")
             return
 
+        if len(new_pwd) < 6:
+            QMessageBox.warning(self, "Validation Error", "New password must be at least 6 characters long.")
+            return
+
         if new_pwd != confirm_pwd:
             QMessageBox.warning(self, "Validation Error", "New password confirmation does not match.")
             return
 
-        current_hash = hashlib.sha256(current_pwd.encode('utf-8')).hexdigest()
-        
-        # Verify old password from db or config fallback
-        config_hash = self.config.get("dashboard_password_hash")
-        
-        if config_hash:
-            is_valid = current_hash == config_hash
-        else:
-            # Fallback default if not set (no hash means default password 'admin')
-            is_valid = current_hash == hashlib.sha256(b"admin").hexdigest()
+        # Determine target user
+        target_user = self.current_user
+        if not target_user:
+            users = self.db.get_all_users()
+            target_user = users[0]["username"] if users else "admin"
+
+        # Verify old password using constant-time salted verification
+        is_valid = self.db.verify_user(target_user, current_pwd)
+        if not is_valid:
+            # Also check fallback if verifying against config hash
+            config_hash = self.config.get("dashboard_password_hash")
+            if config_hash and PasswordManager.verify_password(current_pwd, config_hash):
+                is_valid = True
 
         if not is_valid:
             QMessageBox.critical(self, "Auth Error", "Current administrator password is incorrect.")
             return
 
-        new_hash = hashlib.sha256(new_pwd.encode('utf-8')).hexdigest()
+        # Securely hash new password
+        new_hash = PasswordManager.hash_password(new_pwd)
         
-        # Save new hash in config
+        # Save in database and sync in config
+        db_updated = self.db.change_user_password(target_user, new_hash)
         self.config.set("dashboard_password_hash", new_hash)
-        if self.config.save_config():
-            # Sync user table in sqlite as well
-            self.db.change_user_password("admin", new_hash)
+        config_saved = self.config.save_config()
+
+        if db_updated or config_saved:
             QMessageBox.information(self, "Success", "Administrator password updated successfully.")
             self.current_pwd_input.clear()
             self.new_pwd_input.clear()
             self.confirm_pwd_input.clear()
         else:
-            QMessageBox.critical(self, "Error", "Failed to encrypt settings.")
+            QMessageBox.critical(self, "Error", "Failed to update administrator password.")

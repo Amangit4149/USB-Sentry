@@ -184,9 +184,9 @@ class MapView(QWidget):
                     icon=folium.Icon(color="red", icon="info-sign")
                 ).add_to(m)
                 
-            # Save HTML
-            output_dir = os.path.dirname(os.path.abspath(__file__))
-            map_path = os.path.join(output_dir, "guardian_map.html")
+            # Save HTML to user temp directory (avoid polluting project directory or Git tracking)
+            import tempfile
+            map_path = os.path.join(tempfile.gettempdir(), "usb_sentry_map.html")
             m.save(map_path)
             
             # Open in browser

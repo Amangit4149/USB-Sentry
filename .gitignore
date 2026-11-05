@@ -1,8 +1,49 @@
+# Python bytecode and caches
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
 .pytest_cache/
+*.spec
+
+# Database files
 *.db
+*.db-journal
+*.db-wal
+*.sqlite
+*.sqlite3
+Database/*.db
+guardian.db
+
+# User configuration and encrypted credentials
+settings.enc
+settings.json
+Config/settings.enc
+*.enc
+*.key
+signing.key
+
+# Environment and secrets
+.env
+.env.*
+
+# Generated reports, exports, and map visualizations
+*.pdf
+*.csv
+*.html
+Dashboard/views/guardian_map.html
+Dashboard/views/usb_sentry_map.html
+temp_chart.png
+*.png.tmp
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+*.lnk
+.vscode/
+.idea/
+
+# Application and runtime logs
 *.log
+logs/
 scratch/
+.usb_sentry_data/

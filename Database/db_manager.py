@@ -1,30 +1,37 @@
 import os
 import sqlite3
+import contextlib
 from datetime import datetime
+from Config.paths import get_default_db_path
+from Encryption.password_manager import PasswordManager
 
 class DBManager:
     def __init__(self, db_path=None):
         if db_path is None:
-            # Create standard database in a subfolder Database
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            self.db_path = os.path.join(current_dir, "guardian.db")
+            # Default to user-isolated LocalAppData path: %LOCALAPPDATA%\USB-Sentry\guardian.db
+            self.db_path = get_default_db_path()
         else:
             self.db_path = db_path
         
         # Ensure parent directory exists
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        os.makedirs(os.path.dirname(os.path.abspath(self.db_path)), exist_ok=True)
         self.init_db()
 
+    @contextlib.contextmanager
     def get_connection(self):
+        """Context manager that automatically opens and closes SQLite connections cleanly."""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            yield conn
+        finally:
+            conn.close()
 
     def init_db(self):
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
-            # Users table (for admin credentials)
+            # Users table (for administrator credentials)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -140,68 +147,75 @@ class DBManager:
                 )
             """)
             conn.commit()
-
-            # Seed initial file activity logs if empty
-            cursor.execute("SELECT COUNT(*) FROM file_activity_logs")
-            if cursor.fetchone()[0] == 0:
-                sample_data = [
-                    ("D: (04015225CE90C96E055D)", "MODIFIED", r"D:\project\aaaa\New folder\ascii.webp", "20,664 B", "2026-08-30 08:46:39"),
-                    ("D: (04015225CE90C96E055D)", "CREATED",  r"D:\project\aaaa\New folder\ascii.webp", "20,664 B", "2026-08-30 08:46:39"),
-                    ("D: (04015225CE90C96E055D)", "MODIFIED", r"D:\project\aaaa\ascii.webp", "20,664 B", "2026-08-30 08:46:17"),
-                    ("D: (04015225CE90C96E055D)", "CREATED",  r"D:\project\aaaa\ascii.webp", "20,664 B", "2026-08-30 08:46:17"),
-                    ("D: (04015225CE90C96E055D)", "MODIFIED", r"D:\project\ascii.webp", "20,664 B", "2026-08-30 08:45:18"),
-                    ("D: (04015225CE90C96E055D)", "CREATED",  r"D:\project\ascii.webp", "20,664 B", "2026-08-30 08:45:18"),
-                    ("D: (04015225CE90C96E055D)", "DELETED",  r"D:\New folder", "—", "2026-08-30 08:43:59"),
-                    ("D: (04015225CE90C96E055D)", "DELETED",  r"D:\New folder", "—", "2026-08-30 08:43:12"),
-                ]
-                cursor.executemany("""
-                    INSERT INTO file_activity_logs (drive_serial, event_action, file_path, file_size, timestamp)
-                    VALUES (?, ?, ?, ?, ?)
-                """, sample_data)
-                conn.commit()
+            # Clean installation: NO sample records are seeded. Starts completely empty.
 
     # User Management functions
     def register_user(self, username, password_hash):
+        """Registers a new administrator with their hashed credentials."""
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     "INSERT INTO users (username, password_hash) VALUES (?, ?)",
-                    (username, password_hash)
+                    (username.strip(), password_hash)
                 )
                 conn.commit()
                 return True
         except sqlite3.IntegrityError:
             return False
 
-    def verify_user(self, username, password_hash):
+    def verify_user(self, username, password_or_hash):
+        """
+        Verifies credentials against the stored hash in constant time.
+        Supports salted modern hashes and upgrades legacy SHA-256 hashes automatically.
+        """
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT password_hash FROM users WHERE username = ?",
-                (username,)
+                (username.strip(),)
             )
             row = cursor.fetchone()
-            if row and row['password_hash'] == password_hash:
+            if not row:
+                return False
+
+            stored_hash = row['password_hash']
+            if PasswordManager.verify_password(password_or_hash, stored_hash):
+                # If verified with a legacy hash and a plaintext password was passed, upgrade hash
+                if PasswordManager.needs_rehash(stored_hash) and len(password_or_hash) != 64:
+                    try:
+                        new_hash = PasswordManager.hash_password(password_or_hash)
+                        self.change_user_password(username, new_hash)
+                    except Exception:
+                        pass
                 return True
             return False
 
     def change_user_password(self, username, new_password_hash):
+        """Updates the password hash for a given user."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "UPDATE users SET password_hash = ? WHERE username = ?",
-                (new_password_hash, username)
+                (new_password_hash, username.strip())
             )
             conn.commit()
             return cursor.rowcount > 0
 
     def check_user_exists(self):
+        """Checks if at least one administrator account exists in the database."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM users")
             count = cursor.fetchone()[0]
             return count > 0
+
+    def get_all_users(self):
+        """Returns non-sensitive metadata for all registered administrator accounts."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, username, created_at FROM users ORDER BY id ASC")
+            return [dict(row) for row in cursor.fetchall()]
 
     # Registered USB operations
     def register_usb(self, serial_number, label, manufacturer, pid, vid, owner_name, owner_email, emergency_contact, secret_key):
@@ -255,6 +269,7 @@ class DBManager:
         except sqlite3.Error as e:
             print(f"Error logging device event: {e}")
             return None
+
     def log_unknown_device(self, serial_number, manufacturer, vid, pid, drive_letter,
                            computer_name, username, local_ip, public_ip, mac_address,
                            os_version, suspicious_files=None):
@@ -281,7 +296,6 @@ class DBManager:
         """Return most recent unregistered USB events."""
         try:
             with self.get_connection() as conn:
-                conn.row_factory = __import__('sqlite3').Row
                 cursor = conn.cursor()
                 cursor.execute("""
                     SELECT * FROM unknown_device_logs ORDER BY timestamp DESC LIMIT ?
@@ -289,7 +303,6 @@ class DBManager:
                 return [dict(r) for r in cursor.fetchall()]
         except Exception:
             return []
-
 
     def log_location(self, usb_serial, country, state, city, latitude, longitude, maps_link):
         try:
