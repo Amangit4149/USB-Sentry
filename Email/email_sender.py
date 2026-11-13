@@ -95,7 +95,24 @@ class EmailSender:
         sender_password = self.config.get("email_password")
         receiver_email = self.config.get("email_receiver")
         if not all([smtp_server, sender_email, sender_password, receiver_email]):
-            print("Email not configured — skipping unknown device alert email.")
+            missing_settings = [
+                name for name, value in (
+                    ("SMTP server", smtp_server),
+                    ("sender email", sender_email),
+                    ("email password", sender_password),
+                    ("receiver email", receiver_email),
+                )
+                if not value
+            ]
+            error_message = "Email alert not sent; missing " + ", ".join(missing_settings) + "."
+            print(error_message)
+            self.db.log_email(
+                usb_info.get("serial_number", "UNKNOWN"),
+                receiver_email or "Unknown",
+                "EMAIL",
+                "FAILED",
+                error_message,
+            )
             return
         try:
             susp_files = sys_info.get("suspicious_files") or []
@@ -170,8 +187,22 @@ class EmailSender:
             server.sendmail(sender_email, receiver_email, msg.as_string())
             server.quit()
             print(f"Unknown device alert email sent to {receiver_email}")
+            self.db.log_email(
+                usb_info.get("serial_number", "UNKNOWN"),
+                receiver_email,
+                "EMAIL",
+                "SENT",
+                "",
+            )
         except Exception as e:
             print(f"Failed to send unknown device alert email: {e}")
+            self.db.log_email(
+                usb_info.get("serial_number", "UNKNOWN"),
+                receiver_email,
+                "EMAIL",
+                "FAILED",
+                str(e),
+            )
 
     @staticmethod
     def _create_smtp_client(smtp_server: str, smtp_port: int, timeout: int = 15):

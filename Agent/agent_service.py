@@ -34,10 +34,12 @@ class AgentService:
         """Internal handler for USB insertion — wrapped by on_usb_inserted for safety."""
         drive_letter = device_details.get("drive_letter")
         serial = device_details.get("serial_number")
+        if drive_letter:
+            self.file_watcher.start_watching(drive_letter, serial or "Unreadable serial")
         
         if not serial:
-            print(f"USB drive detected at {drive_letter} but hardware serial number is unreadable.")
-            return
+            serial = f"UNREADABLE-{drive_letter or 'UNKNOWN'}"
+            print(f"USB drive detected at {drive_letter} but hardware serial number is unreadable; logging as {serial}.")
 
         print(f"\n{'='*50}")
         print(f"USB Device Inserted: {device_details.get('manufacturer', 'Unknown')} on {drive_letter} (Serial: {serial})")
@@ -49,7 +51,11 @@ class AgentService:
         # 2. If not registered locally, check if provisioned with metadata file on the USB root
         if not usb_info:
             print(f"USB {serial} not registered in local database. Scanning filesystem for tracking credentials...")
-            metadata = self.monitor.check_usb_for_metadata(drive_letter)
+            metadata = (
+                self.monitor.check_usb_for_metadata(drive_letter)
+                if device_details.get("serial_number")
+                else None
+            )
             if metadata:
                 print("Valid digitally signed tracking metadata found on drive! Auto-registering device...")
                 success = self.db.register_usb(
@@ -124,10 +130,6 @@ class AgentService:
         )
         if loc_id:
             print(f"✅ Location tracking logged successfully (ID: {loc_id}).")
-
-        # Start real-time file activity watcher on inserted USB drive
-        if drive_letter:
-            self.file_watcher.start_watching(drive_letter, serial)
 
         # 5. Dispatch Notifications
         # SMTPLib Email Dispatcher
@@ -207,11 +209,6 @@ class AgentService:
         if loc_id:
             print(f"✅ Location logged for unknown device (ID: {loc_id}).")
 
-        # 4. Start real-time file activity watcher (so file operations are tracked even for unknown USBs)
-        if drive_letter:
-            self.file_watcher.start_watching(drive_letter, serial)
-            print(f"✅ File activity watcher started on {drive_letter} for unknown device {serial}.")
-        
         # 5. Build synthetic usb_info-like dict for alert dispatchers
         unknown_usb_info = {
             "serial_number": serial,
