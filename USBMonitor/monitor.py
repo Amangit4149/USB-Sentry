@@ -298,6 +298,12 @@ class USBMonitor(threading.Thread):
                     if details["is_usb"]:
                         active_drives[disk.DeviceID] = details
                         print(f"   Pre-existing USB drive: {disk.DeviceID} (Serial: {details.get('serial_number', 'N/A')})")
+                        if self.insertion_callback:
+                            try:
+                                self.insertion_callback(details)
+                            except Exception as cb_err:
+                                print(f"❌ Initial insertion callback error: {cb_err}")
+                                traceback.print_exc()
                 if not active_drives:
                     print("   No pre-existing USB drives found.")
             except Exception as e:
