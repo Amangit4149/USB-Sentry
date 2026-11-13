@@ -3,12 +3,14 @@ import sys
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 
 # Ensure project root is in sys.path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+from Config import paths as app_paths
 from Config.paths import get_default_db_path, get_default_config_path
 from Database.db_manager import DBManager
 from Config.config_manager import ConfigManager
@@ -23,6 +25,50 @@ class TestUSBDataIsolationAndSecurity(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_default_database_path_isolated_by_windows_profile(self):
+        with (
+            mock.patch.object(app_paths.sys, "platform", "win32"),
+            mock.patch.object(app_paths.os, "makedirs"),
+            mock.patch.dict(os.environ, {
+                "USB_SENTRY_DATA_DIR": "",
+                "LOCALAPPDATA": r"C:\Users\Alice\AppData\Local",
+            }),
+        ):
+            alice_path = get_default_db_path()
+
+        with (
+            mock.patch.object(app_paths.sys, "platform", "win32"),
+            mock.patch.object(app_paths.os, "makedirs"),
+            mock.patch.dict(os.environ, {
+                "USB_SENTRY_DATA_DIR": "",
+                "LOCALAPPDATA": r"C:\Users\Bob\AppData\Local",
+            }),
+        ):
+            bob_path = get_default_db_path()
+
+        self.assertIn("Alice", alice_path)
+        self.assertIn("Bob", bob_path)
+        self.assertNotEqual(alice_path, bob_path)
+
+    def test_data_directory_fallback_stays_under_user_home(self):
+        fallback_path = os.path.join(os.path.expanduser("~"), ".usb-sentry")
+        with (
+            mock.patch.object(app_paths.sys, "platform", "win32"),
+            mock.patch.dict(os.environ, {
+                "USB_SENTRY_DATA_DIR": "",
+                "LOCALAPPDATA": r"C:\restricted\AppData\Local",
+            }),
+            mock.patch.object(
+                app_paths.os,
+                "makedirs",
+                side_effect=[PermissionError("restricted"), None],
+            ) as make_dirs,
+        ):
+            data_path = app_paths.get_app_data_dir()
+
+        self.assertEqual(os.path.normcase(data_path), os.path.normcase(fallback_path))
+        self.assertEqual(make_dirs.call_count, 2)
 
     def test_a_first_computer_lifecycle(self):
         """Test A: First computer - clean empty DB, logging events, persistence after restart."""

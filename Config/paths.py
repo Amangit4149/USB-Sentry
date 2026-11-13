@@ -1,14 +1,15 @@
 import os
 import sys
-import tempfile
 
 def get_app_data_dir() -> str:
     r"""
     Returns the user-specific local application data directory.
     - Windows: %LOCALAPPDATA%\USB-Sentry (e.g., C:\Users\<Username>\AppData\Local\USB-Sentry)
-    - Linux/macOS: ~/.usb-sentry
-    - Supports USB_SENTRY_DATA_DIR override for testing and custom environments.
-    - Gracefully falls back to system temp or workspace data if permissions are restricted.
+    - Linux/macOS: ~/.local/share/USB-Sentry
+    - Supports USB_SENTRY_DATA_DIR for testing and custom environments; using the
+      same override for multiple accounts intentionally shares that data directory.
+    - Uses a fallback under the user's home directory if the standard path is unavailable.
+      It never falls back to shared system-temp or project-workspace storage.
     """
     # 1. Explicit override (e.g. for testing)
     env_dir = os.environ.get("USB_SENTRY_DATA_DIR")
@@ -29,18 +30,20 @@ def get_app_data_dir() -> str:
     try:
         os.makedirs(data_dir, exist_ok=True)
         return data_dir
-    except (PermissionError, OSError):
-        # Fallback to user temp directory if LocalAppData creation is restricted (e.g. sandbox/CI)
-        fallback_dir = os.path.join(tempfile.gettempdir(), "USB-Sentry")
+    except OSError as primary_error:
+        fallback_dir = os.path.join(os.path.expanduser("~"), ".usb-sentry")
+        if os.path.normcase(os.path.abspath(fallback_dir)) == os.path.normcase(os.path.abspath(data_dir)):
+            raise OSError(
+                f"Cannot create USB-Sentry's per-user data directory: {data_dir}"
+            ) from primary_error
         try:
             os.makedirs(fallback_dir, exist_ok=True)
             return fallback_dir
-        except (PermissionError, OSError):
-            # Final fallback: workspace-isolated local data folder
-            root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            local_fallback = os.path.join(root_dir, ".usb_sentry_data")
-            os.makedirs(local_fallback, exist_ok=True)
-            return local_fallback
+        except OSError as fallback_error:
+            raise OSError(
+                "Cannot create USB-Sentry's per-user data directory. "
+                f"Tried {data_dir} and {fallback_dir}."
+            ) from fallback_error
 
 def get_default_db_path() -> str:
     """Returns the default user-isolated database file path."""
